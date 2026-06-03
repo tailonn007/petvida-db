@@ -59,8 +59,8 @@ GROUP BY a.id, a.nome, e.nome, t.nome;
 
 
 CREATE OR REPLACE VIEW vw_inadimplentes AS
-SELECT
+SELECT 
     data_hora, tutor, telefone, animal, valor, status_pagamento
 FROM vw_consultas_completas
-WHERE status = 'concluida'
+WHERE status = 'concluida' 
   AND (status_pagamento = 'pendente' OR status_pagamento IS NULL);
