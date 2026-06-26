@@ -1,77 +1,65 @@
--- Tabela de auditoria
-CREATE TABLE IF NOT EXISTS log_auditoria (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    tabela_afetada VARCHAR(50),
-    acao VARCHAR(20),
-    registro_id INT,
-    detalhes TEXT,
-    data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 DELIMITER $$
 
--- A) AFTER INSERT em consultas
+DROP TRIGGER IF EXISTS trg_after_insert_consulta$$
+
 CREATE TRIGGER trg_after_insert_consulta
 AFTER INSERT ON consultas
 FOR EACH ROW
 BEGIN
-    INSERT INTO log_auditoria (
-        tabela_afetada,
-        acao,
-        registro_id,
-        detalhes
-    )
+    INSERT INTO log_auditoria (tabela_afetada, acao, registro_id, detalhes)
     VALUES (
         'consultas',
         'INSERT',
         NEW.id,
-        CONCAT('Consulta criada com status: ', NEW.status)
+        CONCAT('Consulta criada para o animal ID: ', NEW.animal_id, ' com o Vet ID: ', NEW.veterinario_id)
     );
 END$$
 
--- B) AFTER UPDATE status da consulta
-CREATE TRIGGER trg_after_update_consulta_status
+
+DROP TRIGGER IF EXISTS trg_after_update_consulta$$
+
+CREATE TRIGGER trg_after_update_consulta
 AFTER UPDATE ON consultas
 FOR EACH ROW
 BEGIN
-    IF OLD.status <> NEW.status THEN
-        INSERT INTO log_auditoria (
-            tabela_afetada,
-            acao,
-            registro_id,
-            detalhes
-        )
-        VALUES (
-            'consultas',
-            'UPDATE',
-            NEW.id,
-            CONCAT('Status alterado de ', OLD.status, ' para ', NEW.status)
-        );
-    END IF;
+    INSERT INTO log_auditoria (tabela_afetada, acao, registro_id, detalhes)
+    VALUES (
+        'consultas',
+        'UPDATE',
+        NEW.id,
+        CONCAT('Consulta modificada. Valor antigo: R$', OLD.valor, ' -> Novo valor: R$', NEW.valor)
+    );
 END$$
 
--- C) BEFORE DELETE consulta paga
+
+DROP TRIGGER IF EXISTS trg_before_delete_consulta$$
+
 CREATE TRIGGER trg_before_delete_consulta
 BEFORE DELETE ON consultas
 FOR EACH ROW
 BEGIN
-    IF OLD.pagamento = 'pago' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Nao e permitido excluir consulta paga';
+    -- Declaramos uma variável para checar se o pagamento existe
+    DECLARE v_pago_count INT;
+    
+    SELECT COUNT(*) INTO v_pago_count 
+    FROM pagamentos 
+    WHERE consulta_id = OLD.id;
+    
+    -- Se houver pagamento para esta consulta, barra a exclusão com erro customizado
+    IF v_pago_count > 0 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Erro: Não é possível deletar uma consulta que possui registro de pagamento.';
     END IF;
 END$$
 
--- D) AFTER INSERT em animais
+
+DROP TRIGGER IF EXISTS trg_after_insert_animal$$
+
 CREATE TRIGGER trg_after_insert_animal
 AFTER INSERT ON animais
 FOR EACH ROW
 BEGIN
-    INSERT INTO log_auditoria (
-        tabela_afetada,
-        acao,
-        registro_id,
-        detalhes
-)
+    INSERT INTO log_auditoria (tabela_afetada, acao, registro_id, detalhes)
     VALUES (
         'animais',
         'INSERT',
@@ -80,14 +68,16 @@ BEGIN
     );
 END$$
 
--- E) BEFORE UPDATE pagamento
+DROP TRIGGER IF EXISTS trg_before_update_pagamento$$
+
 CREATE TRIGGER trg_before_update_pagamento
 BEFORE UPDATE ON pagamentos
 FOR EACH ROW
 BEGIN
-    IF OLD.status <> 'pago'
-       AND NEW.status = 'pago' THEN
-        SET NEW.data_pagamento = CURDATE();
+    -- Se o status antigo já era 'pago' e tentarem mudar para qualquer outra coisa:
+    IF OLD.status = 'pago' AND NEW.status <> 'pago' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Erro: Um pagamento com status PAGO não pode ser alterado.';
     END IF;
 END$$
 

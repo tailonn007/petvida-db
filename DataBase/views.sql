@@ -1,66 +1,74 @@
 USE petvida;
 
-CREATE OR REPLACE VIEW vw_consultas_completas AS
-SELECT 
+DROP VIEW IF EXISTS vw_inadimplentes;
+DROP VIEW IF EXISTS vw_animais_detalhados;
+DROP VIEW IF EXISTS vw_faturamento_mensal;
+DROP VIEW IF EXISTS vw_agenda_hoje;
+DROP VIEW IF EXISTS vw_consultas_completas;
+
+CREATE VIEW vw_consultas_completas AS
+SELECT
     c.data_hora,
-    c.status,
+    'Concluída' AS status,
     c.diagnostico,
     c.valor,
     a.nome AS animal,
-    e.nome AS especie,
+    a.especie AS especie,
     t.nome AS tutor,
     t.telefone,
     v.nome AS veterinario,
-    esp.nome AS especialidade,
+    v.especialidade,
     p.forma_pagamento,
-    p.status_pagamento
+    p.status AS status_pagamento
 FROM consultas c
 INNER JOIN animais a ON c.animal_id = a.id
-INNER JOIN especies e ON a.especie_id = e.id
 INNER JOIN tutores t ON a.tutor_id = t.id
 INNER JOIN veterinarios v ON c.veterinario_id = v.id
-INNER JOIN especialidades esp ON v.especialidade_id = esp.id
-LEFT JOIN pagamentos p ON c.id = p.consulta_id;
+LEFT JOIN pagamentos p ON p.consulta_id = c.id;
 
-
-CREATE OR REPLACE VIEW vw_agenda_hoje AS
-SELECT 
-    TIME(data_hora) AS hora,
-    animal, especie, tutor, telefone, veterinario, status
+CREATE VIEW vw_agenda_hoje AS
+SELECT *
 FROM vw_consultas_completas
-WHERE DATE(data_hora) = CURDATE()
-ORDER BY hora ASC;
+WHERE DATE(data_hora) = CURDATE();
 
-
-CREATE OR REPLACE VIEW vw_faturamento_mensal AS
-SELECT 
+CREATE VIEW vw_faturamento_mensal AS
+SELECT
     YEAR(data_hora) AS ano,
     MONTH(data_hora) AS mes,
     veterinario,
     COUNT(*) AS total_consultas,
-    SUM(valor) AS faturamento_bruto
+    SUM(valor) AS faturamento_total
 FROM vw_consultas_completas
-WHERE status_pagamento = 'pago'
 GROUP BY YEAR(data_hora), MONTH(data_hora), veterinario;
 
-
-CREATE OR REPLACE VIEW vw_animais_detalhados AS
-SELECT 
-    a.id AS id_animal,
+CREATE VIEW vw_animais_detalhados AS
+SELECT
+    a.id,
     a.nome AS animal,
-    e.nome AS especie,
+    a.especie,
+    a.raca,
+    a.data_nascimento,
     t.nome AS tutor,
+    t.telefone,
     COUNT(c.id) AS total_consultas
 FROM animais a
-INNER JOIN especies e ON a.especie_id = e.id
 INNER JOIN tutores t ON a.tutor_id = t.id
-LEFT JOIN consultas c ON a.id = c.animal_id
-GROUP BY a.id, a.nome, e.nome, t.nome;
+LEFT JOIN consultas c ON c.animal_id = a.id
+GROUP BY a.id, a.nome, a.especie, a.raca, a.data_nascimento, t.nome, t.telefone;
 
-
-CREATE OR REPLACE VIEW vw_inadimplentes AS
-SELECT 
-    data_hora, tutor, telefone, animal, valor, status_pagamento
+CREATE VIEW vw_inadimplentes AS
+SELECT *
 FROM vw_consultas_completas
-WHERE status = 'concluida' 
-  AND (status_pagamento = 'pendente' OR status_pagamento IS NULL);
+WHERE status_pagamento IS NULL
+   OR status_pagamento = 'Pendente';
+   
+   
+   SELECT * FROM vw_consultas_completas;
+
+SELECT * FROM vw_agenda_hoje;
+
+SELECT * FROM vw_faturamento_mensal;
+
+SELECT * FROM vw_animais_detalhados;
+
+SELECT * FROM vw_inadimplentes;
